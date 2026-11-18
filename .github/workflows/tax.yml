@@ -21,7 +21,8 @@ concurrency:
 
 jobs:
   taxroll:
-    runs-on: ubuntu-latest
+    # Pinned like scrape.yml: ubuntu-latest moved to Ubuntu 26 in Oct 2026 and its package mirrors failed.
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +31,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install packages
-        run: pip install -q -r requirements.txt
+        run: |
+          for i in 1 2 3; do timeout 300 pip install -q -r requirements.txt && break; echo "pip failed (try $i of 3)"; sleep 20; done
       - name: Tax roll
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
