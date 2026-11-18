@@ -1,11 +1,13 @@
 name: Weekly tax roll (Tax Lawsuit / Tax Delinquent)
 
 on:
-  # The county Tax Offices post their rolls weekly (Monday). Runs Monday ~9:17pm Chicago (03:17 UTC Tuesday:
-  # 9:17pm CST / 10:17pm CDT): after the 7pm foreclosure scrape, before probate (~11pm) and the 1am full run.
+  # Every night ~9:17pm Chicago (03:17 UTC: 9:17pm CST / 10:17pm CDT): after the 7pm foreclosure scrape, before
+  # probate (~11pm) and the 1am full run. The counties post new rolls on different days (Tarrant Friday, Dallas
+  # Monday), so a daily run picks each one up the next night. Accounts already in a tab are skipped, and an account
+  # is archived only after missing on two runs at least 5 days apart (ARCH_MIN_DAYS), so daily runs are safe.
   # It archives paid accounts by deleting rows, so it must never run at the same time as the other scrapers.
   schedule:
-    - cron: "17 3 * * 2"
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       mode:

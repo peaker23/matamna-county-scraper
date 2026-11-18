@@ -13,7 +13,7 @@ no sheet IDs and no lead data. Everything private lives in GitHub **Secrets** an
 |---|---|---|---|
 | Daily county scrape (`scrape.yml`) | `scraper/main.py` | 7 AM, 10 AM, 1 PM, 4 PM, 7 PM (40 min each) + **1 AM full catch-up run** (up to 320 min), plus **Fetch now** in the web app / *Run workflow* here | Foreclosure notices from the County Clerks |
 | Daily probate (`probate.yml`) | `scraper/probate.py` | ~11:07 PM (12:07 AM in summer) | Probate records (County Clerk records, Collin / Denton probate courts) |
-| Weekly tax roll (`tax.yml`) | `scraper/tax.py` | Monday ~9:17 PM (10:17 PM in summer) | Tax lawsuits and tax-delinquent accounts |
+| Daily tax roll (`tax.yml`) | `scraper/tax.py` | Every night ~9:17 PM (10:17 PM in summer) | Tax lawsuits and tax-delinquent accounts |
 | Tests (`tests.yml`) | `tests/` | every push | Parser tests (pytest) |
 
 GitHub fires two cron entries per slot (summer / winter time); the run that lands outside a Chicago slot stops in
