@@ -11,13 +11,15 @@ no sheet IDs and no lead data. Everything private lives in GitHub **Secrets** an
 
 | Workflow | Script | When (Chicago time) | What it adds |
 |---|---|---|---|
-| Daily county scrape (`scrape.yml`) | `scraper/main.py` | 10 AM and 6 PM, plus **Fetch now** in the web app / *Run workflow* here | Foreclosure notices from the County Clerks |
+| Daily county scrape (`scrape.yml`) | `scraper/main.py` | 7 AM, 10 AM, 1 PM, 4 PM, 7 PM (40 min each) + **1 AM full catch-up run** (up to 320 min), plus **Fetch now** in the web app / *Run workflow* here | Foreclosure notices from the County Clerks |
 | Daily probate (`probate.yml`) | `scraper/probate.py` | ~3:37 AM | Probate records (County Clerk records, Collin / Denton probate courts) |
 | Weekly tax roll (`tax.yml`) | `scraper/tax.py` | Tuesday ~2 AM | Tax lawsuits and tax-delinquent accounts |
 | Tests (`tests.yml`) | `tests/` | every push | Parser tests (pytest) |
 
 GitHub fires two cron entries per slot (summer / winter time); the run that lands outside a Chicago slot stops in
-its first step, in a few seconds. *Run workflow* inputs: `force`, `days_back` (extra days to look back) and
+its first step, in a few seconds. Runs never overlap (one at a time); notices a run had no time for are
+read by the next one, and the 1 AM run has time for all of them. If GitHub has not started a slot's run 20 minutes
+after the slot, the web app starts it through the API (it shows as *Manual*). *Run workflow* inputs: `force`, `days_back` (extra days to look back) and
 `budget_min` (minutes of scraping before it stops; 40 normal, up to 320 to clear a backlog).
 
 ## Secrets (Settings › Secrets and variables › Actions)
