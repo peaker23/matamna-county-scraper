@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  push:
+    paths: ["scraper/**", "tests/**", "requirements.txt", ".github/workflows/tests.yml"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Python packages
+        run: pip install -q -r requirements.txt pytest
+      - name: Scraper parsers (pytest)
+        run: python -m pytest -q tests

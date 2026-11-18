@@ -1,0 +1,50 @@
+name: Daily probate (County Clerk records + probate courts)
+
+on:
+  # Every day ~3:37am Chicago (09:37 UTC in CST / 08:37 UTC in CDT is fine either way),
+  # well away from the foreclosure scrape slots (8am-8pm).
+  schedule:
+    - cron: "37 9 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "write = add new rows; count = read and print only (nothing written)"
+        default: "write"
+      days:
+        description: "Days to look back"
+        default: "14"
+      counties:
+        description: "Comma list (blank = Collin,Denton,Dallas,Tarrant)"
+        default: ""
+
+concurrency:
+  group: probate
+  cancel-in-progress: false
+
+jobs:
+  probate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+      - name: Install packages
+        run: |
+          pip install -q -r requirements.txt
+          python -m playwright install --with-deps chromium > /dev/null
+      - name: Probate
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          PROBATE_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode || 'write' }}
+          PROBATE_DAYS: ${{ inputs.days || '14' }}
+          PROBATE_COUNTIES: ${{ inputs.counties || '' }}
+        run: python -m scraper.probate

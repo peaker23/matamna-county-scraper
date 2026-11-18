@@ -1,0 +1,39 @@
+name: Weekly tax roll (Tax Lawsuit / Tax Delinquent)
+
+on:
+  # The county Tax Offices post their rolls weekly (Monday). Runs Tuesday ~2-3am Chicago,
+  # well away from the foreclosure scrape slots.
+  schedule:
+    - cron: "17 8 * * 2"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "write = add new rows; count = parse and count only (nothing written)"
+        default: "write"
+      counties:
+        description: "Comma list (blank = Collin,Denton,Dallas,Tarrant)"
+        default: ""
+
+concurrency:
+  group: taxroll
+  cancel-in-progress: false
+
+jobs:
+  taxroll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install packages
+        run: pip install -q -r requirements.txt
+      - name: Tax roll
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          TAX_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode || 'write' }}
+          TAX_COUNTIES: ${{ inputs.counties || '' }}
+        run: python -m scraper.tax
