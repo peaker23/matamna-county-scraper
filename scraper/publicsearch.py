@@ -29,10 +29,21 @@ class PublicSearch:
 
     # ---------- session ----------
     def connect(self):
-        html = self.http.get(f"https://{self.host}/", timeout=30).text
-        m = re.search(r'"authToken"\s*:\s*"([^"]+)"', html)
+        html, m, status = "", None, "no response"
+        for attempt in range(5):
+            try:
+                resp = self.http.get(f"https://{self.host}/", timeout=30)
+                html, status = resp.text, f"HTTP {resp.status_code}"
+            except requests.RequestException as e:
+                html, status = "", f"{type(e).__name__}"
+            m = re.search(r'"authToken"\s*:\s*"([^"]+)"', html)
+            if m:
+                break
+            print(f"  {self.county}: no authToken (try {attempt + 1}/5, {status}, {len(html)} bytes: {html[:100]!r})", flush=True)
+            time.sleep(8 * (attempt + 1))
+            self.http.cookies.clear()
         if not m:
-            raise RuntimeError("no authToken on home page (site changed?)")
+            raise RuntimeError(f"no authToken on home page after 5 tries ({status}; site changed or blocked?)")
         self.token = m.group(1)
         ip = re.search(r'"ip"\s*:\s*"([^"]+)"', html)
         self.ip = ip.group(1) if ip else ""
