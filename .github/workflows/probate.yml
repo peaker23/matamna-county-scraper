@@ -1,8 +1,8 @@
 name: Daily probate (County Clerk records + probate courts)
 
 on:
-  # Every day ~11:07pm Chicago (05:07 UTC: 11:07pm CST / 12:07am CDT): after the 7pm foreclosure scrape and done
-  # before the 1am full catch-up run. Runs that write the same sheet must not overlap (the tax roll deletes rows).
+  # Every day ~11:07pm Chicago (05:07 UTC: 11:07pm CST / 12:07am CDT): after the 6:45pm foreclosure scrape
+  # Runs that write the same sheet must not overlap (the tax roll deletes rows).
   schedule:
     - cron: "7 5 * * *"
   workflow_dispatch:

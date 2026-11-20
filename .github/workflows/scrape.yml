@@ -1,16 +1,13 @@
 name: Daily county scrape
 
 on:
-  # Chicago time: 7am, 10am, 1pm, 4pm, 7pm (normal runs, 40 min of scraping) + 1am (full catch-up run, up to
-  # 320 min, clears everything earlier runs left for later). Public repo: Actions minutes are free.
+  # Chicago time: 9:45am (daily catch-up run, up to 120 min), 3:45pm and 6:45pm (40 min each). Three runs a day
+  # since 2026-11-20: fewer requests to the county sites. Public repo: Actions minutes are free.
   # Each slot has a CDT (UTC-5) and a CST (UTC-6) entry; the first step skips the one that lands outside the slot.
   schedule:
-    - cron: "3 6,7 * * *"     # 1am
-    - cron: "3 12,13 * * *"   # 7am
-    - cron: "3 15,16 * * *"   # 10am
-    - cron: "3 18,19 * * *"   # 1pm
-    - cron: "3 21,22 * * *"   # 4pm
-    - cron: "3 0,1 * * *"     # 7pm
+    - cron: "45 14,15 * * *"  # 9:45am
+    - cron: "45 20,21 * * *"  # 3:45pm
+    - cron: "45 23,0 * * *"   # 6:45pm
   # "Fetch now" button in the County Leads app (and the Run workflow button on GitHub).
   workflow_dispatch:
     inputs:
@@ -37,13 +34,13 @@ jobs:
       - name: Check the time slot (before installing anything)
         id: slot
         # Scheduled runs: GitHub fires two cron entries per slot (summer / winter time); only the one that lands in a
-        # Chicago slot (1am, 7am, 10am, 1pm, 4pm, 7pm) goes on. The others stop here in a few seconds
+        # Chicago slot (9:45am, 3:45pm, 6:45pm) goes on. The others stop here in a few seconds
         # instead of after the 3-minute install. "Fetch now" / Run workflow always goes on.
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           h=$(TZ=America/Chicago date +%H); mi=$(TZ=America/Chicago date +%M); m=$((10#$h * 60 + 10#$mi)); run=false
           budget=40
-          for s in 60 420 600 780 960 1140; do d=$((m - s)); if [ $d -ge 0 ] && [ $d -le 45 ]; then run=true; if [ $s -eq 60 ]; then budget=320; fi; fi; done   # 45 min: the other time-zone entry, 1 h later, stops here instead of installing
+          for s in 585 945 1125; do d=$((m - s)); if [ $d -ge 0 ] && [ $d -le 45 ]; then run=true; if [ $s -eq 585 ]; then budget=120; fi; fi; done   # 45 min: the other time-zone entry, 1 h later, stops here instead of installing
           echo "Chicago $h:$mi -> run=$run budget=$budget min"
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "budget=$budget" >> "$GITHUB_OUTPUT"
