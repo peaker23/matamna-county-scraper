@@ -1,16 +1,12 @@
 name: Daily county scrape
 
 on:
-  # Chicago time: 7am, 10am, 1pm, 4pm, 7pm (normal runs, 40 min of scraping) + 1am (full catch-up run, up to
-  # 320 min, clears everything earlier runs left for later). Public repo: Actions minutes are free.
-  # Each slot has a CDT (UTC-5) and a CST (UTC-6) entry; the first step skips the one that lands outside the slot.
+  # These slots match the County Leads app; the morning run gets extra time to catch up.
   schedule:
-    - cron: "3 6,7 * * *"     # 1am
-    - cron: "3 12,13 * * *"   # 7am
-    - cron: "3 15,16 * * *"   # 10am
-    - cron: "3 18,19 * * *"   # 1pm
-    - cron: "3 21,22 * * *"   # 4pm
-    - cron: "3 0,1 * * *"     # 7pm
+    - cron: "45 9 * * *"
+      timezone: America/Chicago
+    - cron: "45 15,18 * * *"
+      timezone: America/Chicago
   # "Fetch now" button in the County Leads app (and the Run workflow button on GitHub).
   workflow_dispatch:
     inputs:
@@ -25,8 +21,8 @@ on:
         default: "40"
 
 concurrency:
-  group: scrape
-  cancel-in-progress: false
+  group: county-leads-sheet-writer
+  queue: max
 
 jobs:
   scrape:
@@ -34,34 +30,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
-      - name: Check the time slot (before installing anything)
-        id: slot
-        # Scheduled runs: GitHub fires two cron entries per slot (summer / winter time); only the one that lands in a
-        # Chicago slot (1am, 7am, 10am, 1pm, 4pm, 7pm) goes on. The others stop here in a few seconds
-        # instead of after the 3-minute install. "Fetch now" / Run workflow always goes on.
-        run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          h=$(TZ=America/Chicago date +%H); mi=$(TZ=America/Chicago date +%M); m=$((10#$h * 60 + 10#$mi)); run=false
-          budget=40
-          for s in 60 420 600 780 960 1140; do d=$((m - s)); if [ $d -ge 0 ] && [ $d -le 45 ]; then run=true; if [ $s -eq 60 ]; then budget=320; fi; fi; done   # 45 min: the other time-zone entry, 1 h later, stops here instead of installing
-          echo "Chicago $h:$mi -> run=$run budget=$budget min"
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "budget=$budget" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-        if: steps.slot.outputs.run == 'true'
       - uses: actions/setup-python@v5
-        if: steps.slot.outputs.run == 'true'
         with:
           python-version: "3.12"
           cache: pip
       - name: Cache Playwright browser
-        if: steps.slot.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
       - name: Install OCR + packages
-        if: steps.slot.outputs.run == 'true'
         run: |
           # Retries: a short network / mirror outage on the GitHub runner used to fail the whole run (exit code 100).
           for i in 1 2 3 4 5; do
@@ -74,11 +53,11 @@ jobs:
           # timeout: on 2026-11-18 this step hung for 7+ min (run #1); a hung try is now stopped and retried
           for i in 1 2 3; do timeout 420 python -m playwright install --with-deps chromium > /dev/null && break; echo "playwright install failed or hung (try $i of 3)"; sleep 30; done
       - name: Scrape
-        if: steps.slot.outputs.run == 'true'
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force || 'false' }}
+          TRUST_SCHEDULE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
           DAYS_BACK: ${{ inputs.days_back || '0' }}
-          BUDGET_MIN: ${{ inputs.budget_min || steps.slot.outputs.budget || '40' }}
+          BUDGET_MIN: ${{ inputs.budget_min || (github.event.schedule == '45 9 * * *' && '120') || '40' }}
         run: python -m scraper.main

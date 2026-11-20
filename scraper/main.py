@@ -24,7 +24,7 @@ from .sheet import CHI, Sheet, now_str, today
 
 SOURCE = "Foreclosure notices (County Clerk)"
 COUNTIES = {"Collin": "collin", "Tarrant": "tarrant", "Dallas": "dallas", "Denton": "denton"}   # Collin first: fast, no OCR
-RUN_SLOTS = [(1, 0), (7, 0), (10, 0), (13, 0), (16, 0), (19, 0)]   # Chicago time: 1am (full catch-up run) + 7am, 10am, 1pm, 4pm, 7pm
+RUN_SLOTS = [(9, 45), (15, 45), (18, 45)]  # Chicago time, matching the app
 FIRST_RUN_DAYS = 45          # first ever run looks back this far
 OVERLAP_DAYS = 7             # later runs re-read the last week (late indexing)
 BUDGET_MIN = float(os.environ.get("BUDGET_MIN") or 40)   # stop OCR before the job timeout; rest goes next run
@@ -465,18 +465,20 @@ def main():
     now = datetime.now(CHI)
     mins = now.hour * 60 + now.minute
     in_slot = any(0 <= mins - (h * 60 + m) <= 75 for h, m in RUN_SLOTS)   # allow GitHub's late starts
-    if not force and not in_slot:
-        log(f"Chicago time {now:%H:%M}: not a scheduled time (1am/7am/10am/1pm/4pm/7pm), nothing to do.")
+    trusted_schedule = (os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+                        and os.environ.get("TRUST_SCHEDULE") == "true")
+    if not force and not trusted_schedule and not in_slot:
+        log(f"Chicago time {now:%H:%M}: outside the 9:45am, 3:45pm or 6:45pm slot.")
         return 0
     days_back = int(os.environ.get("DAYS_BACK") or 0)
     sh = Sheet()
     if not force:                    # GitHub often starts scheduled runs late: allow an hour, but run once per slot
         last = sh.last_run_at(SOURCE)   # only foreclosure runs count (tax / probate runs write the same log)
-        # 50 min: slots are 3 h apart; the 1am catch-up run can end shortly before the 7am slot and must not block it
         if last and (datetime.now(CHI).replace(tzinfo=None) - last).total_seconds() < 50 * 60:
             log(f"A run already finished at {last:%H:%M}; nothing to do.")
             return 0
     failed = False
+    coverage = []
     names = list(COUNTIES.items())
     for i, (county, slug) in enumerate(names):
         c0, detail = time.time(), []
@@ -513,8 +515,26 @@ def main():
         except Exception:
             traceback.print_exc()
             failed = True
+        coverage.append((county, status, s.get("found"), s.get("new"), s.get("review")))
         log(county, status, window, s, msg)
+    write_coverage_summary(coverage)
     return 1 if failed else 0
+
+
+def write_coverage_summary(coverage):
+    """Publish source completion and counts without exposing records in the summary."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    incomplete = [county for county, status, *_ in coverage if status not in ("complete", "paused")]
+    with open(path, "a", encoding="utf-8") as report:
+        report.write("## Foreclosure source coverage\n\n")
+        if incomplete:
+            report.write("**Partial coverage.** Review Fetch log for: " + ", ".join(incomplete) + ".\n\n")
+        report.write("| County | Coverage | Found | Added | Review |\n|---|---|---:|---:|---:|\n")
+        for county, status, *counts in coverage:
+            values = " | ".join(str(n) if n is not None else "—" for n in counts)
+            report.write(f"| {county} | {status} | {values} |\n")
 
 
 if __name__ == "__main__":
