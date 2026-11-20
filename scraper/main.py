@@ -478,6 +478,7 @@ def main():
             return 0
     failed = False
     names = list(COUNTIES.items())
+    tries = {}
     for i, (county, slug) in enumerate(names):
         c0, detail = time.time(), []
         deadline = time.time() + max(60, left_s() / (len(names) - i))     # share the time left fairly
@@ -490,9 +491,20 @@ def main():
             else:
                 status, window, s, msg = run_county(sh, county, slug, days_back, deadline, detail)
         except Exception as e:
-            traceback.print_exc()
-            status, window, s, msg = "incomplete", "", {}, f"{type(e).__name__}: {str(e)[:300]}"
-            failed = True
+            msg403 = str(e)
+            if "no authToken" in msg403 and "HTTP 403" in msg403:
+                # The county site (Cloudflare) refused the GitHub machine. Not a code error: do not fail the whole workflow.
+                tries[county] = tries.get(county, 0) + 1
+                if tries[county] < 4 and left_s() > 25 * 60:
+                    log(f"{county}: refused by the county site (HTTP 403); trying again later in this run (try {tries[county]} of 3)")
+                    time.sleep(240)
+                    names.append((county, slug))
+                    continue
+                status, window, s, msg = "incomplete", "", {}, "county site refused the GitHub machine (HTTP 403, Cloudflare check) after repeated tries; the next slot tries again"
+            else:
+                traceback.print_exc()
+                status, window, s, msg = "incomplete", "", {}, f"{type(e).__name__}: {str(e)[:300]}"
+                failed = True
         info = f"{TRIGGER} · run {RUN_ID} · {int(time.time() - c0)}s" + (f" · {RUN_URL}" if RUN_URL else "")
         row = [now_str(), county, SOURCE, status, window, s.get("found", ""), s.get("new", ""),
                s.get("review", ""), s.get("skip", ""), s.get("filed", ""), s.get("sale_exact", ""),
