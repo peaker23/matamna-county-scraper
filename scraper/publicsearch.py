@@ -14,6 +14,18 @@ from datetime import datetime, timedelta
 import requests
 import websocket
 
+class Blocked(RuntimeError):
+    """The county site's Cloudflare check refused this machine (HTTP 403 "Just a moment..." page).
+
+    This is the site limiting traffic from data-center machines such as GitHub's runners, not a code error.
+    Retrying from the same machine does not help, so callers stop at once and report the county as blocked.
+    """
+
+
+def _is_challenge(status_code, html):
+    return status_code == 403 and ("Just a moment" in html[:2000] or "challenge-platform" in html or "cf-chl" in html)
+
+
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 
 
@@ -30,20 +42,24 @@ class PublicSearch:
     # ---------- session ----------
     def connect(self):
         html, m, status = "", None, "no response"
-        for attempt in range(5):
+        for attempt in range(3):
+            code = None
             try:
                 resp = self.http.get(f"https://{self.host}/", timeout=30)
-                html, status = resp.text, f"HTTP {resp.status_code}"
+                html, code, status = resp.text, resp.status_code, f"HTTP {resp.status_code}"
             except requests.RequestException as e:
                 html, status = "", f"{type(e).__name__}"
             m = re.search(r'"authToken"\s*:\s*"([^"]+)"', html)
             if m:
                 break
-            print(f"  {self.county}: no authToken (try {attempt + 1}/5, {status}, {len(html)} bytes: {html[:100]!r})", flush=True)
-            time.sleep((20, 40, 60, 90, 120)[attempt])
+            if _is_challenge(code, html):
+                # Same machine, same answer: waiting minutes here only made runs take 1-2 hours. Stop now.
+                raise Blocked(f"no authToken: {self.host} refused this machine (HTTP 403, Cloudflare check)")
+            print(f"  {self.county}: no authToken (try {attempt + 1}/3, {status}, {len(html)} bytes: {html[:100]!r})", flush=True)
+            time.sleep((10, 30, 0)[attempt])
             self.http.cookies.clear()
         if not m:
-            raise RuntimeError(f"no authToken on home page after 5 tries ({status}; site changed or blocked?)")
+            raise RuntimeError(f"no authToken on home page after 3 tries ({status}; site changed?)")
         self.token = m.group(1)
         ip = re.search(r'"ip"\s*:\s*"([^"]+)"', html)
         self.ip = ip.group(1) if ip else ""

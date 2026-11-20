@@ -144,3 +144,19 @@ def test_delete_rows_batches_bottom_first():
     reqs = ws.spreadsheet.calls[0]["requests"]
     spans = [(q["deleteDimension"]["range"]["startIndex"], q["deleteDimension"]["range"]["endIndex"]) for q in reqs]
     assert spans == [(8, 10), (2, 5)]                    # rows 9-10, then rows 3-5 (0-based start, end exclusive)
+
+
+def test_publicsearch_stops_at_once_on_cloudflare_block(monkeypatch):
+    import pytest
+    from scraper import publicsearch
+
+    class R:
+        status_code, text = 403, '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>'
+
+    calls = []
+    ps = publicsearch.PublicSearch("dallas")
+    monkeypatch.setattr(ps.http, "get", lambda *a, **k: calls.append(1) or R())
+    monkeypatch.setattr(publicsearch.time, "sleep", lambda s: None)
+    with pytest.raises(publicsearch.Blocked):
+        ps.connect()
+    assert len(calls) == 1          # no minutes of retries from the same machine
