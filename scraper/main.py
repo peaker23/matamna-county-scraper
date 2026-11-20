@@ -19,7 +19,7 @@ import traceback
 from datetime import datetime, timedelta
 
 from . import cad, collin, notice
-from .publicsearch import PublicSearch
+from .publicsearch import Blocked, PublicSearch
 from .sheet import CHI, Sheet, now_str, today
 
 SOURCE = "Foreclosure notices (County Clerk)"
@@ -478,7 +478,6 @@ def main():
             return 0
     failed = False
     names = list(COUNTIES.items())
-    tries = {}
     for i, (county, slug) in enumerate(names):
         c0, detail = time.time(), []
         deadline = time.time() + max(60, left_s() / (len(names) - i))     # share the time left fairly
@@ -490,21 +489,18 @@ def main():
                 status, window, s, msg = run_collin(sh, county, deadline, detail)
             else:
                 status, window, s, msg = run_county(sh, county, slug, days_back, deadline, detail)
+        except Blocked as e:
+            # The county site (Cloudflare) refused the GitHub machine. Not a code error: the workflow stays green,
+            # the web app's Fetch log shows the county red with this reason, and GitHub shows a warning on the run.
+            log(f"{county}: {e}")
+            print(f"::warning title={county} blocked::{county} County Clerk site refused the GitHub machine "
+                  f"(Cloudflare, HTTP 403). No {county} notices were read in this run.", flush=True)
+            status, window, s, msg = "incomplete", "", {}, ("blocked: the county site refused the GitHub machine "
+                                                           "(HTTP 403, Cloudflare check); no notices read")
         except Exception as e:
-            msg403 = str(e)
-            if "no authToken" in msg403 and "HTTP 403" in msg403:
-                # The county site (Cloudflare) refused the GitHub machine. Not a code error: do not fail the whole workflow.
-                tries[county] = tries.get(county, 0) + 1
-                if tries[county] < 4 and left_s() > 25 * 60:
-                    log(f"{county}: refused by the county site (HTTP 403); trying again later in this run (try {tries[county]} of 3)")
-                    time.sleep(240)
-                    names.append((county, slug))
-                    continue
-                status, window, s, msg = "incomplete", "", {}, "county site refused the GitHub machine (HTTP 403, Cloudflare check) after repeated tries; the next slot tries again"
-            else:
-                traceback.print_exc()
-                status, window, s, msg = "incomplete", "", {}, f"{type(e).__name__}: {str(e)[:300]}"
-                failed = True
+            traceback.print_exc()
+            status, window, s, msg = "incomplete", "", {}, f"{type(e).__name__}: {str(e)[:300]}"
+            failed = True
         info = f"{TRIGGER} · run {RUN_ID} · {int(time.time() - c0)}s" + (f" · {RUN_URL}" if RUN_URL else "")
         row = [now_str(), county, SOURCE, status, window, s.get("found", ""), s.get("new", ""),
                s.get("review", ""), s.get("skip", ""), s.get("filed", ""), s.get("sale_exact", ""),

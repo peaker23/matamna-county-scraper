@@ -448,14 +448,24 @@ def resolve(county, rec):
 
 
 def run(county, d0, d1):
-    recs = clerk_records(county, d0, d1)
+    """-> (records, note). A County Clerk site that refuses the machine (Cloudflare) does not stop the probate
+    court list (Collin, Denton): that is a separate site."""
+    from .publicsearch import Blocked
+    note = ""
+    try:
+        recs = clerk_records(county, d0, d1)
+    except Blocked as e:
+        log(f"{county}: {e}")
+        print(f"::warning title={county} clerk blocked::{county} County Clerk site refused the GitHub machine "
+              f"(Cloudflare, HTTP 403). Clerk probate records not read in this run.", flush=True)
+        recs, note = [], "County Clerk records blocked (HTTP 403, Cloudflare check)"
     if county in ("Collin", "Denton"):
         try:
             recs += court_records(county, d0, d1)
         except Exception as e:
             traceback.print_exc()
             log(f"{county}: probate court list not read: {type(e).__name__}: {str(e)[:200]}")
-    return recs
+    return recs, note
 
 
 def write(sh, county, recs, run_id):
@@ -543,7 +553,7 @@ def main():
                          "paused in the web app (Fetch log > Scrape counties); not scraped"]])
                 log(f"{county}: paused in the web app, skipped")
                 continue
-            recs = run(county, d0, d1)
+            recs, note = run(county, d0, d1)
             if MODE == "count":
                 res = Counter()
                 for rec in recs[:60]:
@@ -557,9 +567,13 @@ def main():
                 s = write(sh, county, recs, run_id)
                 summary[county] = s
                 from .sheet import now_str
-                sh.log([[now_str(), county, SOURCE_NAME, "complete" if not s["bad"] else "partial",
+                status = "incomplete" if note and county not in ("Collin", "Denton") else \
+                    "partial" if note or s["bad"] else "complete"
+                sh.log([[now_str(), county, SOURCE_NAME, status,
                          f"{d0}..{d1}", s["found"], s["new"], s["review"], s["skip"], s["found"], "", "",
-                         f"probate run {run_id} · {int(time.time() - t0)}s"]])
+                         (note + " · " if note else "") + f"probate run {run_id} · {int(time.time() - t0)}s"]])
+                if note:
+                    s["note"] = note
         except Exception as e:
             traceback.print_exc()
             failed = True
