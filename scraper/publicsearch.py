@@ -40,7 +40,7 @@ class PublicSearch:
             if m:
                 break
             print(f"  {self.county}: no authToken (try {attempt + 1}/5, {status}, {len(html)} bytes: {html[:100]!r})", flush=True)
-            time.sleep(8 * (attempt + 1))
+            time.sleep((20, 40, 60, 90, 120)[attempt])
             self.http.cookies.clear()
         if not m:
             raise RuntimeError(f"no authToken on home page after 5 tries ({status}; site changed or blocked?)")
