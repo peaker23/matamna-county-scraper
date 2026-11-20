@@ -11,17 +11,15 @@ no sheet IDs and no lead data. Everything private lives in GitHub **Secrets** an
 
 | Workflow | Script | When (Chicago time) | What it adds |
 |---|---|---|---|
-| Daily county scrape (`scrape.yml`) | `scraper/main.py` | 7 AM, 10 AM, 1 PM, 4 PM, 7 PM (40 min each) + **1 AM full catch-up run** (up to 320 min), plus **Fetch now** in the web app / *Run workflow* here | Foreclosure notices from the County Clerks |
-| Daily probate (`probate.yml`) | `scraper/probate.py` | ~11:07 PM (12:07 AM in summer) | Probate records (County Clerk records, Collin / Denton probate courts) |
-| Daily tax roll (`tax.yml`) | `scraper/tax.py` | Every night ~9:17 PM (10:17 PM in summer) | Tax lawsuits and tax-delinquent accounts |
+| Daily county scrape (`scrape.yml`) | `scraper/main.py` | 9:45 AM (120-minute catch-up), 3:45 PM and 6:45 PM (40 minutes), plus Fetch now | Foreclosure notices from the County Clerks |
+| Daily probate (`probate.yml`) | `scraper/probate.py` | 11:07 PM | Probate records (County Clerk and available probate court lists) |
+| Daily tax roll (`tax.yml`) | `scraper/tax.py` | 9:17 PM | Tax lawsuits and delinquent accounts from the latest published county rolls |
 | Tests (`tests.yml`) | `tests/` | every push | Parser tests (pytest) |
 
-GitHub fires two cron entries per slot (summer / winter time); the run that lands outside a Chicago slot stops in
-its first step, in a few seconds. The three scrapers are scheduled so they never write the sheet at the same time
-(the tax roll deletes archived rows). Foreclosure runs never overlap each other (one at a time); notices a run had no time for are
-read by the next one, and the 1 AM run has time for all of them. If GitHub has not started a slot's run 20 minutes
-after the slot, the web app starts it through the API (it shows as *Manual*). *Run workflow* inputs: `force`, `days_back` (extra days to look back) and
-`budget_min` (minutes of scraping before it stops; 40 normal, up to 320 to clear a backlog).
+GitHub schedules use America/Chicago and allow delayed starts. All three workflows queue in the same
+repository concurrency group so scheduled and manual writers do not overlap. If a foreclosure slot has not
+been dispatched after 20 minutes, the app can queue it. The GitHub foreclosure summary and the app's
+Fetch log report per-county coverage. A partial import can add usable records while some sources remain incomplete.
 
 ## Secrets (Settings › Secrets and variables › Actions)
 

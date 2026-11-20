@@ -1,13 +1,10 @@
-name: Weekly tax roll (Tax Lawsuit / Tax Delinquent)
+name: Daily tax roll (Tax Lawsuit / Tax Delinquent)
 
 on:
-  # Every night ~9:17pm Chicago (03:17 UTC: 9:17pm CST / 10:17pm CDT): after the 7pm foreclosure scrape, before
-  # probate (~11pm) and the 1am full run. The counties post new rolls on different days (Tarrant Friday, Dallas
-  # Monday), so a daily run picks each one up the next night. Accounts already in a tab are skipped, and an account
-  # is archived only after missing on two runs at least 5 days apart (ARCH_MIN_DAYS), so daily runs are safe.
-  # It archives paid accounts by deleting rows, so it must never run at the same time as the other scrapers.
+  # Check daily for newly published county rolls. The Sheets writer is shared across workflows.
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "17 21 * * *"
+      timezone: America/Chicago
   workflow_dispatch:
     inputs:
       mode:
@@ -18,8 +15,8 @@ on:
         default: ""
 
 concurrency:
-  group: taxroll
-  cancel-in-progress: false
+  group: county-leads-sheet-writer
+  queue: max
 
 jobs:
   taxroll:
